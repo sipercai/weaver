@@ -93,6 +93,14 @@ pub const DEFAULT_LIVE_CHECK_REGO: &str =
 pub const DEFAULT_LIVE_CHECK_REGO_POLICY_PATH: &str =
     "defaults/policies/live_check_advice/otel.rego";
 
+/// Embedded LoongSuite GenAI live check rego policies
+pub const LOONGSUITE_GENAI_LIVE_CHECK_REGO: &str =
+    include_str!("../../../defaults/policies/live_check_advice/loongsuite_genai.rego");
+
+/// LoongSuite GenAI live check rego policy path - used in error messages
+pub const LOONGSUITE_GENAI_LIVE_CHECK_REGO_POLICY_PATH: &str =
+    "defaults/policies/live_check_advice/loongsuite_genai.rego";
+
 /// Embedded default live check jq preprocessor
 pub const DEFAULT_LIVE_CHECK_JQ: &str = include_str!("../../../defaults/jq/advice.jq");
 

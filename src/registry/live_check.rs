@@ -177,6 +177,11 @@ pub struct RegistryLiveCheckArgs {
     #[config]
     advice_policies: Option<PathBuf>,
 
+    /// Built-in advice profile to add to the live-check policy set. Supported: loongsuite-genai.
+    #[arg(long)]
+    #[config]
+    advice_profile: Option<String>,
+
     /// Advice preprocessor. A jq script to preprocess the registry data before passing to rego.
     #[arg(long)]
     #[config]
@@ -281,10 +286,11 @@ pub(crate) fn command(
 
     live_checker.finding_modifier = FindingModifier::from_filters(&config.finding_filters);
 
-    let rego_advisor = RegoAdvisor::new(
+    let rego_advisor = RegoAdvisor::new_with_advice_profile(
         &live_checker,
         &config.advice_policies,
         &config.advice_preprocessor,
+        &config.advice_profile,
     )?;
     live_checker.add_advisor(Box::new(rego_advisor));
 

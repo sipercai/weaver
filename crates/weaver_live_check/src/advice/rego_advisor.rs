@@ -11,7 +11,8 @@ use super::{emit_findings, Advisor};
 use crate::{
     live_checker::LiveChecker, otlp_logger::OtlpEmitter, Error, Sample, SampleRef,
     VersionedAttribute, VersionedSignal, DEFAULT_LIVE_CHECK_JQ, DEFAULT_LIVE_CHECK_REGO,
-    DEFAULT_LIVE_CHECK_REGO_POLICY_PATH,
+    DEFAULT_LIVE_CHECK_REGO_POLICY_PATH, LOONGSUITE_GENAI_LIVE_CHECK_REGO,
+    LOONGSUITE_GENAI_LIVE_CHECK_REGO_POLICY_PATH,
 };
 
 /// An advisor which runs a rego policy on the attribute
@@ -26,6 +27,16 @@ impl RegoAdvisor {
         policy_dir: &Option<PathBuf>,
         jq_preprocessor: &Option<PathBuf>,
     ) -> Result<Self, Error> {
+        Self::new_with_advice_profile(live_checker, policy_dir, jq_preprocessor, &None)
+    }
+
+    /// Create a new RegoAdvisor with an optional built-in advice profile.
+    pub fn new_with_advice_profile(
+        live_checker: &LiveChecker,
+        policy_dir: &Option<PathBuf>,
+        jq_preprocessor: &Option<PathBuf>,
+        advice_profile: &Option<String>,
+    ) -> Result<Self, Error> {
         let mut engine = Engine::new();
         if let Some(path) = policy_dir {
             let _ = engine
@@ -39,6 +50,27 @@ impl RegoAdvisor {
                 .map_err(|e| Error::AdviceError {
                     error: e.to_string(),
                 })?;
+        }
+
+        match advice_profile.as_deref() {
+            None | Some("") => {}
+            Some("loongsuite-genai") | Some("loongsuite") => {
+                let _ = engine
+                    .add_policy(
+                        LOONGSUITE_GENAI_LIVE_CHECK_REGO_POLICY_PATH,
+                        LOONGSUITE_GENAI_LIVE_CHECK_REGO,
+                    )
+                    .map_err(|e| Error::AdviceError {
+                        error: e.to_string(),
+                    })?;
+            }
+            Some(profile) => {
+                return Err(Error::AdviceError {
+                    error: format!(
+                        "Unsupported live-check advice profile '{profile}'. Supported profiles: loongsuite-genai"
+                    ),
+                });
+            }
         }
 
         // If there is a jq preprocessor then pass the live_checker data through it before adding it to the engine

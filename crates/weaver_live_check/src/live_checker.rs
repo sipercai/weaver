@@ -172,6 +172,7 @@ mod tests {
             DataPoints, SampleExemplar, SampleExponentialHistogramDataPoint, SampleInstrument,
             SampleMetric, SampleNumberDataPoint,
         },
+        sample_span::{SampleSpan, Status, StatusCode},
         LiveCheckRunner, LiveCheckStatistics, Sample,
     };
 
@@ -207,8 +208,35 @@ mod tests {
                 .as_mut() // Change to as_mut() to get a mutable reference
                 .map(|result| &mut result.all_advice)
                 .map_or(&mut [], |v| v),
+            Sample::Span(sample_span) => sample_span
+                .live_check_result
+                .as_mut()
+                .map(|result| &mut result.all_advice)
+                .map_or(&mut [], |v| v),
             _ => &mut [],
         }
+    }
+
+    fn sample_attr(name: &str, value: serde_json::Value) -> SampleAttribute {
+        SampleAttribute {
+            name: name.to_owned(),
+            value: Some(value),
+            r#type: None,
+            live_check_result: None,
+        }
+    }
+
+    fn genai_span(name: &str, attrs: Vec<SampleAttribute>, status: Option<Status>) -> Sample {
+        Sample::Span(SampleSpan {
+            name: name.to_owned(),
+            kind: SpanKindSpec::Internal,
+            status,
+            attributes: attrs,
+            span_events: vec![],
+            span_links: vec![],
+            live_check_result: None,
+            resource: None,
+        })
     }
 
     #[test]
@@ -1200,6 +1228,151 @@ mod tests {
                 1
             );
             assert_eq!(cumulative_stats.no_advice_count, 1);
+        } else {
+            panic!("Expected Cumulative statistics");
+        }
+    }
+
+    #[test]
+    fn test_loongsuite_genai_advice_profile() {
+        run_loongsuite_genai_advice_profile_test(false);
+    }
+
+    #[test]
+    fn test_loongsuite_genai_advice_profile_v2() {
+        run_loongsuite_genai_advice_profile_test(true);
+    }
+
+    fn run_loongsuite_genai_advice_profile_test(use_v2: bool) {
+        let registry = make_registry(use_v2);
+
+        let mut samples = vec![
+            genai_span(
+                "tool call",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("execute_tool")),
+                    sample_attr("gen_ai.span.kind", json!("TOOL")),
+                    sample_attr("gen_ai.tool.name", json!("search")),
+                ],
+                None,
+            ),
+            genai_span(
+                "tool call with partial skill",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("execute_tool")),
+                    sample_attr("gen_ai.span.kind", json!("TOOL")),
+                    sample_attr("gen_ai.tool.name", json!("search")),
+                    sample_attr("gen_ai.skill.description", json!("lookup helper")),
+                ],
+                None,
+            ),
+            genai_span(
+                "entry",
+                vec![sample_attr("gen_ai.span.kind", json!("ENTRY"))],
+                None,
+            ),
+            genai_span(
+                "chat",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("chat")),
+                    sample_attr("gen_ai.span.kind", json!("LLM")),
+                ],
+                None,
+            ),
+            genai_span(
+                "react step",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("react")),
+                    sample_attr("gen_ai.span.kind", json!("AGENT")),
+                ],
+                Some(Status {
+                    code: StatusCode::Ok,
+                    message: String::new(),
+                }),
+            ),
+            genai_span(
+                "rerank",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("rerank_documents")),
+                    sample_attr("gen_ai.span.kind", json!("RERANKER")),
+                    sample_attr("gen_ai.provider.name", json!("DashScope")),
+                ],
+                None,
+            ),
+        ];
+
+        let mut live_checker = LiveChecker::new(Arc::new(registry), vec![]);
+        let rego_advisor = RegoAdvisor::new_with_advice_profile(
+            &live_checker,
+            &None,
+            &None,
+            &Some("loongsuite-genai".to_owned()),
+        )
+        .expect("Failed to create Rego advisor");
+        live_checker.add_advisor(Box::new(rego_advisor));
+
+        let mut stats =
+            LiveCheckStatistics::Cumulative(CumulativeStatistics::new(&live_checker.registry));
+        for sample in &mut samples {
+            let result =
+                sample.run_live_check(&mut live_checker, &mut stats, None, &sample.clone());
+            assert!(result.is_ok());
+        }
+        stats.finalize();
+
+        let tool_advice = get_all_advice(&mut samples[0]);
+        assert!(
+            tool_advice.is_empty(),
+            "tool spans without skill context must not require gen_ai.skill.*"
+        );
+
+        let partial_skill_ids = get_all_advice(&mut samples[1])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(partial_skill_ids.contains(&"loongsuite_genai_tool_skill_missing_name"));
+        assert!(partial_skill_ids.contains(&"loongsuite_genai_tool_skill_missing_id"));
+
+        let entry_advice = get_all_advice(&mut samples[2]);
+        assert!(
+            entry_advice.is_empty(),
+            "ENTRY spans are validated when present, but are not required to set an operation name"
+        );
+
+        let chat_ids = get_all_advice(&mut samples[3])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(chat_ids.contains(&"loongsuite_genai_missing_provider_name"));
+
+        let react_ids = get_all_advice(&mut samples[4])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(react_ids.contains(&"loongsuite_genai_span_kind_operation_mismatch"));
+        assert!(react_ids.contains(&"loongsuite_genai_react_round_missing"));
+        assert!(react_ids.contains(&"loongsuite_genai_react_finish_reason_missing"));
+        assert!(react_ids.contains(&"loongsuite_genai_success_status_ok"));
+
+        let rerank_ids = get_all_advice(&mut samples[5])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(rerank_ids.contains(&"loongsuite_genai_rerank_documents_operation"));
+
+        if let LiveCheckStatistics::Cumulative(cumulative_stats) = &stats {
+            assert_eq!(
+                cumulative_stats
+                    .advice_type_counts
+                    .get("loongsuite_genai_tool_skill_missing_name"),
+                Some(&1)
+            );
+            assert_eq!(
+                cumulative_stats
+                    .advice_type_counts
+                    .get("loongsuite_genai_missing_provider_name"),
+                Some(&1)
+            );
         } else {
             panic!("Expected Cumulative statistics");
         }
