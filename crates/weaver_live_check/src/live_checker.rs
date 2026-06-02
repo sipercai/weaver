@@ -1359,6 +1359,7 @@ mod tests {
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
         assert!(rerank_ids.contains(&"loongsuite_genai_rerank_documents_operation"));
+        assert!(rerank_ids.contains(&"loongsuite_genai_otel_span_kind_mismatch"));
 
         if let LiveCheckStatistics::Cumulative(cumulative_stats) = &stats {
             assert_eq!(

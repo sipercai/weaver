@@ -51,6 +51,12 @@ expected_operations_by_kind := {
 	"STEP": ["react"],
 }
 
+expected_otel_span_kind_by_kind := {
+	"LLM": "client",
+	"EMBEDDING": "client",
+	"RERANKER": "client",
+}
+
 skill_attributes := {
 	"gen_ai.skill.name",
 	"gen_ai.skill.id",
@@ -213,6 +219,19 @@ deny contains {
 	expected_ops := expected_operations_by_kind[kind]
 	op := operation_name
 	not array_contains(expected_ops, op)
+}
+
+deny contains {
+	"type": "advice",
+	"advice_type": "loongsuite_genai_otel_span_kind_mismatch",
+	"advice_level": "violation",
+	"advice_context": {"span_name": input.sample.span.name, "span_kind": kind, "otel_span_kind": input.sample.span.kind, "expected_otel_span_kind": expected_otel_span_kind},
+	"message": sprintf("LoongSuite GenAI span kind '%s' must use OTel span kind '%s', got '%s'.", [kind, expected_otel_span_kind, input.sample.span.kind]),
+} if {
+	is_genai_span
+	kind := loongsuite_span_kind
+	expected_otel_span_kind := expected_otel_span_kind_by_kind[kind]
+	input.sample.span.kind != expected_otel_span_kind
 }
 
 deny contains {
