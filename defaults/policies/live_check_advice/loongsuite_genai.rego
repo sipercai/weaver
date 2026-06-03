@@ -11,7 +11,7 @@ allowed_operations := {
 	"create_agent",
 	"invoke_agent",
 	"execute_tool",
-	"rerank",
+	"rerank_documents",
 	"invoke_workflow",
 	"react",
 }
@@ -23,7 +23,7 @@ provider_required_operations := {
 	"embeddings",
 	"create_agent",
 	"invoke_agent",
-	"rerank",
+	"rerank_documents",
 }
 
 allowed_span_kinds := {
@@ -46,7 +46,7 @@ expected_operations_by_kind := {
 	"TOOL": ["execute_tool"],
 	"MCP": ["execute_tool"],
 	"AGENT": ["create_agent", "invoke_agent"],
-	"RERANKER": ["rerank"],
+	"RERANKER": ["rerank_documents"],
 	"WORKFLOW": ["invoke_workflow"],
 	"STEP": ["react"],
 }
@@ -54,7 +54,7 @@ expected_operations_by_kind := {
 expected_otel_span_kind_by_kind := {
 	"LLM": "client",
 	"EMBEDDING": "client",
-	"RERANKER": "client",
+	"RERANKER": "internal",
 }
 
 skill_attributes := {
@@ -133,10 +133,10 @@ operation_name := op if {
 
 rerank_span_name := name if {
 	model := attribute_value("gen_ai.request.model")
-	name := sprintf("rerank %s", [model])
+	name := sprintf("rerank_documents %s", [model])
 }
 
-rerank_span_name := "rerank" if {
+rerank_span_name := "rerank_documents" if {
 	not has_attribute("gen_ai.request.model")
 }
 
@@ -189,19 +189,7 @@ deny contains {
 } if {
 	is_genai_span
 	op := operation_name
-	op != "rerank_documents"
 	not allowed_operations[op]
-}
-
-deny contains {
-	"type": "advice",
-	"advice_type": "loongsuite_genai_rerank_documents_operation",
-	"advice_level": "violation",
-	"advice_context": {"span_name": input.sample.span.name, "operation_name": "rerank_documents", "expected": "rerank"},
-	"message": "LoongSuite rerank spans must use 'gen_ai.operation.name=rerank', not 'rerank_documents'.",
-} if {
-	is_genai_span
-	operation_name == "rerank_documents"
 }
 
 deny contains {

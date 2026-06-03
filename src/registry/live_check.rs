@@ -213,6 +213,18 @@ fn suppress_loongsuite_trace_only_diagnostics(diag_msgs: &mut DiagnosticMessages
 
 fn configure_loongsuite_genai_extensions(live_checker: &mut LiveChecker) {
     live_checker.allow_unregistered_attribute("gen_ai.usage.total_tokens");
+    live_checker.allow_unregistered_attribute("gen_ai.span.kind");
+    live_checker.allow_unregistered_attribute("gen_ai.span_kind_name");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.documents.count");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.scoring_prompt");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.return_documents");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.max_chunks_per_doc");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.device");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.batch_size");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.max_length");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.normalize");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.input_documents");
+    live_checker.allow_unregistered_attribute("gen_ai.rerank.output_documents");
 }
 
 /// Generate output for a complete report - handles line-oriented special case

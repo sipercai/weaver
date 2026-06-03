@@ -1315,13 +1315,26 @@ mod tests {
                     sample_attr("gen_ai.span.kind", json!("RERANKER")),
                     sample_attr("gen_ai.provider.name", json!("DashScope")),
                     sample_attr("gen_ai.request.model", json!("gte-rerank")),
+                    sample_attr("gen_ai.rerank.documents.count", json!(3)),
+                    sample_attr(
+                        "gen_ai.rerank.input_documents",
+                        json!("[{\"text\":\"doc one\"},{\"text\":\"doc two\"},{\"text\":\"doc three\"}]"),
+                    ),
+                    sample_attr(
+                        "gen_ai.rerank.output_documents",
+                        json!("[{\"index\":0,\"relevance_score\":0.9}]"),
+                    ),
                 ],
                 None,
             ),
         ];
 
         let mut live_checker = LiveChecker::new(Arc::new(registry), vec![]);
+        live_checker.allow_unregistered_attribute("gen_ai.span.kind");
         live_checker.allow_unregistered_attribute("gen_ai.usage.total_tokens");
+        live_checker.allow_unregistered_attribute("gen_ai.rerank.documents.count");
+        live_checker.allow_unregistered_attribute("gen_ai.rerank.input_documents");
+        live_checker.allow_unregistered_attribute("gen_ai.rerank.output_documents");
         let rego_advisor = RegoAdvisor::new_with_advice_profile(
             &live_checker,
             &None,
@@ -1395,9 +1408,10 @@ mod tests {
             .iter()
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
-        assert!(rerank_ids.contains(&"loongsuite_genai_rerank_documents_operation"));
-        assert!(rerank_ids.contains(&"loongsuite_genai_rerank_span_name_mismatch"));
-        assert!(rerank_ids.contains(&"loongsuite_genai_otel_span_kind_mismatch"));
+        assert!(
+            rerank_ids.is_empty(),
+            "util genai rerank_documents spans should pass the LoongSuite GenAI profile, got {rerank_ids:?}"
+        );
 
         if let LiveCheckStatistics::Cumulative(cumulative_stats) = &stats {
             assert_eq!(
