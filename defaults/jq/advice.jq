@@ -20,6 +20,12 @@
     .semconv_templates | keys | 
     reduce .[] as $template ({}; . + {($template): true})
   ),
+
+  # Convert profile-specific unregistered attributes to a set
+  "allowed_unregistered_attributes_set": (
+    .allowed_unregistered_attributes // [] |
+    reduce .[] as $attr ({}; . + {($attr): true})
+  ),
   
   # Extract all possible namespaces from attributes
   "namespaces_to_check_set": (

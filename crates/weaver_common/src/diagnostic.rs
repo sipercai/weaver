@@ -156,6 +156,14 @@ impl DiagnosticMessages {
         self.0.extend(diag_msgs);
     }
 
+    /// Removes diagnostic messages matching the provided predicate.
+    pub fn remove_messages_matching<F>(&mut self, mut should_remove: F)
+    where
+        F: FnMut(&MietteDiagnosticExt) -> bool,
+    {
+        self.0.retain(|msg| !should_remove(&msg.diagnostic));
+    }
+
     /// Logs all the diagnostic messages
     pub fn log(&self) {
         self.0

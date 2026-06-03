@@ -11,6 +11,8 @@ templates_set := data.templates_set
 
 namespaces_to_check_set := data.namespaces_to_check_set
 
+allowed_extension_attributes := object.get(data, "allowed_unregistered_attributes_set", {})
+
 name_regex := "^[a-z][a-z0-9]*([._][a-z0-9]+)*$"
 
 derive_namespaces(name) := [
@@ -61,6 +63,7 @@ deny contains make_advice(advice_type, advice_level, advice_context, message) if
 
 	# Skip if no namespace
 	contains(input.sample.attribute.name, ".")
+	not allowed_extension_attributes[input.sample.attribute.name]
 
 	# Get input namespaces
 	namespaces := derive_namespaces(input.sample.attribute.name)
@@ -84,6 +87,7 @@ deny contains make_advice(advice_type, advice_level, advice_context, message) if
 	contains(input.sample.attribute.name, ".") # Must have at least one namespace
 	not is_template_type(input.sample.attribute.name)
 	not attributes_set[input.sample.attribute.name]
+	not allowed_extension_attributes[input.sample.attribute.name]
 
 	# Get input namespaces
 	namespaces := derive_namespaces(input.sample.attribute.name)

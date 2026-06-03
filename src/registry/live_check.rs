@@ -197,6 +197,24 @@ fn default_advisors() -> Vec<Box<dyn Advisor>> {
     ]
 }
 
+fn is_loongsuite_genai_profile(advice_profile: &Option<String>) -> bool {
+    matches!(
+        advice_profile.as_deref(),
+        Some("loongsuite-genai") | Some("loongsuite")
+    )
+}
+
+fn suppress_loongsuite_trace_only_diagnostics(diag_msgs: &mut DiagnosticMessages) {
+    diag_msgs.remove_messages_matching(|diag| {
+        diag.message.starts_with("The metric group `")
+            && diag.message.contains("does not set `requirement_level`")
+    });
+}
+
+fn configure_loongsuite_genai_extensions(live_checker: &mut LiveChecker) {
+    live_checker.allow_unregistered_attribute("gen_ai.usage.total_tokens");
+}
+
 /// Generate output for a complete report - handles line-oriented special case
 fn generate_report(
     output: &mut OutputProcessor,
@@ -281,8 +299,15 @@ pub(crate) fn command(
             VersionedRegistry::V1(Box::new(resolved_v1.into_template_schema()))
         }
     };
+    if is_loongsuite_genai_profile(&config.advice_profile) {
+        suppress_loongsuite_trace_only_diagnostics(&mut diag_msgs);
+    }
+
     // Create the live checker with advisors
     let mut live_checker = LiveChecker::new(Arc::new(registry), default_advisors());
+    if is_loongsuite_genai_profile(&config.advice_profile) {
+        configure_loongsuite_genai_extensions(&mut live_checker);
+    }
 
     live_checker.finding_modifier = FindingModifier::from_filters(&config.finding_filters);
 

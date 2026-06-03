@@ -186,7 +186,9 @@ impl LiveCheckRunner for SampleAttribute {
                 live_checker.find_template(&self.name)
             }
         };
-        if semconv_attribute.is_none() {
+        if semconv_attribute.is_none()
+            && !live_checker.is_unregistered_attribute_allowed(&self.name)
+        {
             let sample_ref = SampleRef::Attribute(self);
             let finding = FindingBuilder::new(FindingId::MissingAttribute)
                 .context(json!({ ATTRIBUTE_KEY_ADVICE_CONTEXT_KEY: self.name.clone() }))

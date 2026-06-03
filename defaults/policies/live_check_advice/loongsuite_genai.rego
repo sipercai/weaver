@@ -131,6 +131,15 @@ operation_name := op if {
 	op := attribute_value("gen_ai.operation.name")
 }
 
+rerank_span_name := name if {
+	model := attribute_value("gen_ai.request.model")
+	name := sprintf("rerank %s", [model])
+}
+
+rerank_span_name := "rerank" if {
+	not has_attribute("gen_ai.request.model")
+}
+
 has_skill_context if {
 	some name in skill_attributes
 	has_attribute(name)
@@ -232,6 +241,20 @@ deny contains {
 	kind := loongsuite_span_kind
 	expected_otel_span_kind := expected_otel_span_kind_by_kind[kind]
 	input.sample.span.kind != expected_otel_span_kind
+}
+
+deny contains {
+	"type": "advice",
+	"advice_type": "loongsuite_genai_rerank_span_name_mismatch",
+	"advice_level": "violation",
+	"advice_context": {"span_name": input.sample.span.name, "expected_span_name": expected_span_name},
+	"message": sprintf("LoongSuite rerank span name must be '%s'.", [expected_span_name]),
+} if {
+	is_genai_span
+	kind := loongsuite_span_kind
+	kind == "RERANKER"
+	expected_span_name := rerank_span_name
+	input.sample.span.name != expected_span_name
 }
 
 deny contains {

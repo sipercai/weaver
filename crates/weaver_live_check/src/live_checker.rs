@@ -3,7 +3,7 @@
 //! Holds the registry, helper structs, and the advisors for the live check
 
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use weaver_semconv::{attribute::AttributeType, group::GroupType};
@@ -36,6 +36,8 @@ pub struct LiveChecker {
     /// Optional finding modifier for overriding/filtering findings
     #[serde(skip)]
     pub finding_modifier: Option<FindingModifier>,
+    /// Profile-specific extension attributes accepted even when absent from the registry.
+    allowed_unregistered_attributes: HashSet<String>,
 }
 
 impl LiveChecker {
@@ -122,12 +124,27 @@ impl LiveChecker {
             templates_by_length,
             otlp_emitter: None,
             finding_modifier: None,
+            allowed_unregistered_attributes: HashSet::new(),
         }
     }
 
     /// Add an advisor
     pub fn add_advisor(&mut self, advisor: Box<dyn Advisor>) {
         self.advisors.push(advisor);
+    }
+
+    /// Accept an attribute that is intentionally outside the loaded registry.
+    pub fn allow_unregistered_attribute(&mut self, attribute_name: impl Into<String>) {
+        let _ = self
+            .allowed_unregistered_attributes
+            .insert(attribute_name.into());
+    }
+
+    /// Returns true when an absent attribute should not be reported as missing.
+    #[must_use]
+    pub fn is_unregistered_attribute_allowed(&self, attribute_name: &str) -> bool {
+        self.allowed_unregistered_attributes
+            .contains(attribute_name)
     }
 
     /// Find an attribute in the registry
@@ -1276,6 +1293,7 @@ mod tests {
                 vec![
                     sample_attr("gen_ai.operation.name", json!("chat")),
                     sample_attr("gen_ai.span.kind", json!("LLM")),
+                    sample_attr("gen_ai.usage.total_tokens", json!(42)),
                 ],
                 None,
             ),
@@ -1291,17 +1309,19 @@ mod tests {
                 }),
             ),
             genai_span(
-                "rerank",
+                "rerank_documents gte-rerank",
                 vec![
                     sample_attr("gen_ai.operation.name", json!("rerank_documents")),
                     sample_attr("gen_ai.span.kind", json!("RERANKER")),
                     sample_attr("gen_ai.provider.name", json!("DashScope")),
+                    sample_attr("gen_ai.request.model", json!("gte-rerank")),
                 ],
                 None,
             ),
         ];
 
         let mut live_checker = LiveChecker::new(Arc::new(registry), vec![]);
+        live_checker.allow_unregistered_attribute("gen_ai.usage.total_tokens");
         let rego_advisor = RegoAdvisor::new_with_advice_profile(
             &live_checker,
             &None,
@@ -1344,6 +1364,23 @@ mod tests {
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
         assert!(chat_ids.contains(&"loongsuite_genai_missing_provider_name"));
+        let total_tokens_ids = match &mut samples[3] {
+            Sample::Span(span) => span
+                .attributes
+                .iter_mut()
+                .find(|attr| attr.name == "gen_ai.usage.total_tokens")
+                .and_then(|attr| attr.live_check_result.as_mut())
+                .map(|result| {
+                    result
+                        .all_advice
+                        .iter()
+                        .map(|advice| advice.id.as_str())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        assert!(!total_tokens_ids.contains(&"missing_attribute"));
 
         let react_ids = get_all_advice(&mut samples[4])
             .iter()
@@ -1359,6 +1396,7 @@ mod tests {
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
         assert!(rerank_ids.contains(&"loongsuite_genai_rerank_documents_operation"));
+        assert!(rerank_ids.contains(&"loongsuite_genai_rerank_span_name_mismatch"));
         assert!(rerank_ids.contains(&"loongsuite_genai_otel_span_kind_mismatch"));
 
         if let LiveCheckStatistics::Cumulative(cumulative_stats) = &stats {
