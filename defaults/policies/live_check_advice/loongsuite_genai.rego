@@ -14,6 +14,7 @@ allowed_operations := {
 	"rerank_documents",
 	"invoke_workflow",
 	"react",
+	"enter",
 }
 
 provider_required_operations := {
@@ -49,12 +50,14 @@ expected_operations_by_kind := {
 	"RERANKER": ["rerank_documents"],
 	"WORKFLOW": ["invoke_workflow"],
 	"STEP": ["react"],
+	"ENTRY": ["enter"],
 }
 
 expected_otel_span_kind_by_kind := {
 	"LLM": "client",
 	"EMBEDDING": "client",
 	"RERANKER": "internal",
+	"ENTRY": "internal",
 }
 
 skill_attributes := {

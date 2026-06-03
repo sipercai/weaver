@@ -1289,6 +1289,17 @@ mod tests {
                 None,
             ),
             genai_span(
+                "enter_ai_application_system",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("enter")),
+                    sample_attr("gen_ai.span.kind", json!("ENTRY")),
+                    sample_attr("gen_ai.session.id", json!("session-1")),
+                    sample_attr("gen_ai.user.id", json!("user-1")),
+                    sample_attr("gen_ai.response.time_to_first_token", json!(123456)),
+                ],
+                None,
+            ),
+            genai_span(
                 "chat",
                 vec![
                     sample_attr("gen_ai.operation.name", json!("chat")),
@@ -1331,6 +1342,9 @@ mod tests {
 
         let mut live_checker = LiveChecker::new(Arc::new(registry), vec![]);
         live_checker.allow_unregistered_attribute("gen_ai.span.kind");
+        live_checker.allow_unregistered_attribute("gen_ai.session.id");
+        live_checker.allow_unregistered_attribute("gen_ai.user.id");
+        live_checker.allow_unregistered_attribute("gen_ai.response.time_to_first_token");
         live_checker.allow_unregistered_attribute("gen_ai.usage.total_tokens");
         live_checker.allow_unregistered_attribute("gen_ai.rerank.documents.count");
         live_checker.allow_unregistered_attribute("gen_ai.rerank.input_documents");
@@ -1372,12 +1386,18 @@ mod tests {
             "ENTRY spans are validated when present, but are not required to set an operation name"
         );
 
-        let chat_ids = get_all_advice(&mut samples[3])
+        let entry_with_operation_advice = get_all_advice(&mut samples[3]);
+        assert!(
+            entry_with_operation_advice.is_empty(),
+            "util genai ENTRY spans with operation 'enter' should pass the LoongSuite GenAI profile"
+        );
+
+        let chat_ids = get_all_advice(&mut samples[4])
             .iter()
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
         assert!(chat_ids.contains(&"loongsuite_genai_missing_provider_name"));
-        let total_tokens_ids = match &mut samples[3] {
+        let total_tokens_ids = match &mut samples[4] {
             Sample::Span(span) => span
                 .attributes
                 .iter_mut()
@@ -1395,7 +1415,7 @@ mod tests {
         };
         assert!(!total_tokens_ids.contains(&"missing_attribute"));
 
-        let react_ids = get_all_advice(&mut samples[4])
+        let react_ids = get_all_advice(&mut samples[5])
             .iter()
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
@@ -1404,7 +1424,7 @@ mod tests {
         assert!(react_ids.contains(&"loongsuite_genai_react_finish_reason_missing"));
         assert!(react_ids.contains(&"loongsuite_genai_success_status_ok"));
 
-        let rerank_ids = get_all_advice(&mut samples[5])
+        let rerank_ids = get_all_advice(&mut samples[6])
             .iter()
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();

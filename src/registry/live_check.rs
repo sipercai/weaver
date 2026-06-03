@@ -213,6 +213,9 @@ fn suppress_loongsuite_trace_only_diagnostics(diag_msgs: &mut DiagnosticMessages
 
 fn configure_loongsuite_genai_extensions(live_checker: &mut LiveChecker) {
     live_checker.allow_unregistered_attribute("gen_ai.usage.total_tokens");
+    live_checker.allow_unregistered_attribute("gen_ai.session.id");
+    live_checker.allow_unregistered_attribute("gen_ai.user.id");
+    live_checker.allow_unregistered_attribute("gen_ai.response.time_to_first_token");
     live_checker.allow_unregistered_attribute("gen_ai.span.kind");
     live_checker.allow_unregistered_attribute("gen_ai.span_kind_name");
     live_checker.allow_unregistered_attribute("gen_ai.rerank.documents.count");
