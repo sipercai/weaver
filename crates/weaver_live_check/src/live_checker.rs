@@ -1305,6 +1305,18 @@ mod tests {
                     sample_attr("gen_ai.operation.name", json!("chat")),
                     sample_attr("gen_ai.span.kind", json!("LLM")),
                     sample_attr("gen_ai.usage.total_tokens", json!(42)),
+                    sample_attr(
+                        "gen_ai.input.messages",
+                        json!(
+                            r#"[{"role":"user","parts":[{"type":"text","content":"hello"}]}]"#
+                        ),
+                    ),
+                    sample_attr(
+                        "gen_ai.output.messages",
+                        json!(
+                            r#"[{"role":"assistant","parts":[{"type":"text","content":"hello back"}],"finish_reason":"stop"}]"#
+                        ),
+                    ),
                 ],
                 None,
             ),
@@ -1338,6 +1350,35 @@ mod tests {
                 ],
                 None,
             ),
+            genai_span(
+                "chat with invalid message schema",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("chat")),
+                    sample_attr("gen_ai.span.kind", json!("LLM")),
+                    sample_attr("gen_ai.provider.name", json!("openai")),
+                    sample_attr(
+                        "gen_ai.input.messages",
+                        json!(
+                            r#"[{"role":"alien","parts":[{"type":"text","content":"hello"}]}]"#
+                        ),
+                    ),
+                    sample_attr(
+                        "gen_ai.output.messages",
+                        json!(r#"[{"role":"assistant","parts":[{"type":"text"}]}]"#),
+                    ),
+                ],
+                None,
+            ),
+            genai_span(
+                "chat with malformed message attribute",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("chat")),
+                    sample_attr("gen_ai.span.kind", json!("LLM")),
+                    sample_attr("gen_ai.provider.name", json!("openai")),
+                    sample_attr("gen_ai.input.messages", json!("not-json")),
+                ],
+                None,
+            ),
         ];
 
         let mut live_checker = LiveChecker::new(Arc::new(registry), vec![]);
@@ -1346,6 +1387,8 @@ mod tests {
         live_checker.allow_unregistered_attribute("gen_ai.user.id");
         live_checker.allow_unregistered_attribute("gen_ai.response.time_to_first_token");
         live_checker.allow_unregistered_attribute("gen_ai.usage.total_tokens");
+        live_checker.allow_unregistered_attribute("gen_ai.input.messages");
+        live_checker.allow_unregistered_attribute("gen_ai.output.messages");
         live_checker.allow_unregistered_attribute("gen_ai.rerank.documents.count");
         live_checker.allow_unregistered_attribute("gen_ai.rerank.input_documents");
         live_checker.allow_unregistered_attribute("gen_ai.rerank.output_documents");
@@ -1432,6 +1475,22 @@ mod tests {
             rerank_ids.is_empty(),
             "util genai rerank_documents spans should pass the LoongSuite GenAI profile, got {rerank_ids:?}"
         );
+
+        let invalid_message_ids = get_all_advice(&mut samples[7])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(invalid_message_ids.contains(&"loongsuite_genai_message_role_invalid"));
+        assert!(invalid_message_ids.contains(&"loongsuite_genai_message_text_part_content_missing"));
+        assert!(
+            invalid_message_ids.contains(&"loongsuite_genai_output_message_finish_reason_missing")
+        );
+
+        let malformed_message_ids = get_all_advice(&mut samples[8])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(malformed_message_ids.contains(&"loongsuite_genai_messages_not_array"));
 
         if let LiveCheckStatistics::Cumulative(cumulative_stats) = &stats {
             assert_eq!(
