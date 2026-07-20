@@ -11,6 +11,14 @@ allowed_operations := {
 	"create_agent",
 	"invoke_agent",
 	"execute_tool",
+	"plan",
+	"search_memory",
+	"create_memory",
+	"update_memory",
+	"upsert_memory",
+	"delete_memory",
+	"create_memory_store",
+	"delete_memory_store",
 	"rerank_documents",
 	"invoke_workflow",
 	"react",
@@ -38,6 +46,7 @@ allowed_span_kinds := {
 	"STEP",
 	"WORKFLOW",
 	"MCP",
+	"MEMORY",
 }
 
 expected_operations_by_kind := {
@@ -49,15 +58,28 @@ expected_operations_by_kind := {
 	"AGENT": ["create_agent", "invoke_agent"],
 	"RERANKER": ["rerank_documents"],
 	"WORKFLOW": ["invoke_workflow"],
-	"STEP": ["react"],
+	"STEP": ["react", "plan"],
 	"ENTRY": ["enter"],
+	"MEMORY": [
+		"search_memory",
+		"create_memory",
+		"update_memory",
+		"upsert_memory",
+		"delete_memory",
+		"create_memory_store",
+		"delete_memory_store",
+	],
 }
 
 expected_otel_span_kind_by_kind := {
-	"LLM": "client",
-	"EMBEDDING": "client",
-	"RERANKER": "internal",
-	"ENTRY": "internal",
+	"LLM": ["client"],
+	"EMBEDDING": ["client"],
+	"RETRIEVER": ["client"],
+	"RERANKER": ["internal"],
+	"ENTRY": ["internal"],
+	"STEP": ["internal"],
+	"WORKFLOW": ["internal"],
+	"MEMORY": ["client", "internal"],
 }
 
 skill_attributes := {
@@ -318,13 +340,13 @@ deny contains {
 	"type": "advice",
 	"advice_type": "loongsuite_genai_otel_span_kind_mismatch",
 	"advice_level": "violation",
-	"advice_context": {"span_name": input.sample.span.name, "span_kind": kind, "otel_span_kind": input.sample.span.kind, "expected_otel_span_kind": expected_otel_span_kind},
-	"message": sprintf("LoongSuite GenAI span kind '%s' must use OTel span kind '%s', got '%s'.", [kind, expected_otel_span_kind, input.sample.span.kind]),
+	"advice_context": {"span_name": input.sample.span.name, "span_kind": kind, "otel_span_kind": input.sample.span.kind, "expected_otel_span_kinds": expected_otel_span_kinds},
+	"message": sprintf("LoongSuite GenAI span kind '%s' must use one of OTel span kinds %v, got '%s'.", [kind, expected_otel_span_kinds, input.sample.span.kind]),
 } if {
 	is_genai_span
 	kind := loongsuite_span_kind
-	expected_otel_span_kind := expected_otel_span_kind_by_kind[kind]
-	input.sample.span.kind != expected_otel_span_kind
+	expected_otel_span_kinds := expected_otel_span_kind_by_kind[kind]
+	not array_contains(expected_otel_span_kinds, input.sample.span.kind)
 }
 
 deny contains {
