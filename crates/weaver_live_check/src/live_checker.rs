@@ -1351,6 +1351,34 @@ mod tests {
                 None,
             ),
             genai_span(
+                "search_memory",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("search_memory")),
+                    sample_attr("gen_ai.span.kind", json!("MEMORY")),
+                    sample_attr("gen_ai.memory.store.id", json!("store-1")),
+                    sample_attr("gen_ai.memory.record.count", json!(2)),
+                ],
+                None,
+            ),
+            genai_span(
+                "upsert_memory",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("upsert_memory")),
+                    sample_attr("gen_ai.span.kind", json!("MEMORY")),
+                    sample_attr("gen_ai.memory.store.id", json!("store-1")),
+                ],
+                None,
+            ),
+            genai_span(
+                "delete_memory",
+                vec![
+                    sample_attr("gen_ai.operation.name", json!("delete_memory")),
+                    sample_attr("gen_ai.span.kind", json!("MEMORY")),
+                    sample_attr("gen_ai.memory.record.id", json!("memory-1")),
+                ],
+                None,
+            ),
+            genai_span(
                 "chat with invalid message schema",
                 vec![
                     sample_attr("gen_ai.operation.name", json!("chat")),
@@ -1381,6 +1409,13 @@ mod tests {
             ),
         ];
 
+        if let Sample::Span(span) = &mut samples[8] {
+            span.kind = SpanKindSpec::Client;
+        }
+        if let Sample::Span(span) = &mut samples[9] {
+            span.kind = SpanKindSpec::Server;
+        }
+
         let mut live_checker = LiveChecker::new(Arc::new(registry), vec![]);
         live_checker.allow_unregistered_attribute("gen_ai.span.kind");
         live_checker.allow_unregistered_attribute("gen_ai.session.id");
@@ -1392,6 +1427,9 @@ mod tests {
         live_checker.allow_unregistered_attribute("gen_ai.rerank.documents.count");
         live_checker.allow_unregistered_attribute("gen_ai.rerank.input_documents");
         live_checker.allow_unregistered_attribute("gen_ai.rerank.output_documents");
+        live_checker.allow_unregistered_attribute("gen_ai.memory.store.id");
+        live_checker.allow_unregistered_attribute("gen_ai.memory.record.id");
+        live_checker.allow_unregistered_attribute("gen_ai.memory.record.count");
         let rego_advisor = RegoAdvisor::new_with_advice_profile(
             &live_checker,
             &None,
@@ -1476,7 +1514,31 @@ mod tests {
             "util genai rerank_documents spans should pass the LoongSuite GenAI profile, got {rerank_ids:?}"
         );
 
-        let invalid_message_ids = get_all_advice(&mut samples[7])
+        let memory_internal_ids = get_all_advice(&mut samples[7])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            memory_internal_ids.is_empty(),
+            "upstream Memory operations may use OTel INTERNAL kind, got {memory_internal_ids:?}"
+        );
+
+        let memory_client_ids = get_all_advice(&mut samples[8])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            memory_client_ids.is_empty(),
+            "upstream Memory operations should use OTel CLIENT kind, got {memory_client_ids:?}"
+        );
+
+        let invalid_memory_ids = get_all_advice(&mut samples[9])
+            .iter()
+            .map(|advice| advice.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(invalid_memory_ids.contains(&"loongsuite_genai_otel_span_kind_mismatch"));
+
+        let invalid_message_ids = get_all_advice(&mut samples[10])
             .iter()
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
@@ -1486,7 +1548,7 @@ mod tests {
             invalid_message_ids.contains(&"loongsuite_genai_output_message_finish_reason_missing")
         );
 
-        let malformed_message_ids = get_all_advice(&mut samples[8])
+        let malformed_message_ids = get_all_advice(&mut samples[11])
             .iter()
             .map(|advice| advice.id.as_str())
             .collect::<Vec<_>>();
